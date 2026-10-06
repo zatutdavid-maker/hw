@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>实时投票</title>
+  <!-- Firebase SDK (CDN，无需安装) -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+  <style>
+    :root {
+      --bg: #FFF8E7;
+      --card: #FFFFFF;
+      --primary: #E8B86D;
+      --primary-dark: #D4A017;
+      --accent: #F5C26B;
+      --text: #3D2B1F;
+      --text-light: #7A6A5A;
+      --border: #F0E0C0;
+      --success: #7CB342;
+      --bar-bg: #F5EDE0;
+      --shadow: 0 4px 20px rgba(61, 43, 31, 0.08);
+      --radius: 16px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }
+
+    header {
+      text-align: center;
+      padding: 32px 0 24px;
+    }
+
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      color: var(--text-light);
+      font-size: 0.95rem;
+      margin-top: 6px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px 24px;
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+    }
+
+    .card h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-light);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      font-size: 1rem;
+      color: var(--text);
+      background: #FFFEF9;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(232, 184, 109, 0.25);
+    }
+
+    .option-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+
+    .option-row input { flex: 1; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 22px;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      outline: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-light);
+      border: 1.5px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bar-bg);
+      color: var(--text);
+    }
+
+    .btn-danger {
+      background: transparent;
+      color: #C62828;
+      border: none;
+      padding: 8px 10px;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+
+    .btn-danger:hover { color: #B71C1C; }
+
+    .btn-block {
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .poll-list { list-style: none; }
+
+    .poll-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 18px;
+      background: var(--card);
+      border-radius: 12px;
+      margin-bottom: 10px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .poll-item:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(61, 43, 31, 0.1);
+    }
+
+    .poll-item-title { font-weight: 600; font-size: 1rem; }
+
+    .poll-item-meta {
+      font-size: 0.8rem;
+      color: var(--text-light);
+      margin-top: 2px;
+    }
+
+    .poll-item-arrow {
+      color: var(--primary);
+      font-size: 1.2rem;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-light);
+    }
+
+    .vote-option {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #FFFEF9;
+    }
+
+    .vote-option:hover {
+      border-color: var(--primary);
+      background: #FFFBF0;
+    }
+
+    .vote-option.selected {
+      border-color: var(--primary);
+      background: #FFF5E0;
+      box-shadow: 0 0 0 3px rgba(232, 184, 109, 0.2);
+    }
+
+    .vote-option input[type="radio"] {
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-radius: 50%;
+      position: relative;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    .vote-option.selected input[type="radio"] {
+      border-color: var(--primary);
+      background: var(--primary);
+    }
+
+    .vote-option.selected input[type="radio"]::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      border-radius: 50%;
+    }
+
+    .vote-option span {
+      font-size: 1rem;
+      font-weight: 500;
+    }
+
+    .result-item { margin-bottom: 18px; }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+
+    .result-label { font-weight: 500; font-size: 0.95rem; }
+
+    .result-pct {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--primary-dark);
+    }
+
+    .result-votes {
+      font-size: 0.8rem;
+      color: var(--text-light);
+      margin-left: 6px;
+    }
+
+    .bar-track {
+      height: 28px;
+      background: var(--bar-bg);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 8px;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      width: 0%;
+      transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .total-votes {
+      text-align: center;
+      color: var(--text-light);
+      font-size: 0.9rem;
+      margin-top: 8px;
+      margin-bottom: 16px;
+    }
+
+    .voted-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #E8F5E9;
+      color: #2E7D32;
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 20px;
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #E3F2FD;
+      color: #1565C0;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: #1565C0;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text-light);
+      font-size: 0.9rem;
+      margin-bottom: 16px;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+    }
+
+    .back-link:hover { color: var(--text); }
+
+    .hidden { display: none !important; }
+
+    .share-box {
+      background: #FFFBF0;
+      border: 1.5px dashed var(--primary);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 16px;
+      margin-bottom: 8px;
+    }
+
+    .share-box label {
+      margin-bottom: 8px;
+    }
+
+    .share-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .share-row input {
+      flex: 1;
+      font-size: 0.85rem;
+    }
+
+    .config-warning {
+      background: #FFF3E0;
+      border: 1px solid #FFB74D;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      font-size: 0.9rem;
+      color: #E65100;
+    }
+
+    .config-warning code {
+      background: rgba(0,0,0,0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+
+    .join-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .join-row input { flex: 1; }
+
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--text);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-light);
+    }
+
+    @media (max-width: 480px) {
+      .container { padding: 16px 12px 40px; }
+      .card { padding: 22px 16px; }
+      header h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🗳️ 实时投票</h1>
+      <p>创建投票 · 分享链接 · 多人实时同步</p>
+    </header>
+
+    <!-- 未配置 Firebase 时的提示 -->
+    <div id="config-banner" class="config-warning hidden">
+      <strong>请先配置 Firebase</strong><br>
+      打开本文件，找到顶部的 <code>firebaseConfig</code>，填入你的 Firebase 项目配置后保存刷新。
+      详细步骤见文件底部注释。
+    </div>
+
+    <!-- HOME -->
+    <div id="view-home">
+      <div class="actions" style="margin-bottom: 20px;">
+        <button class="btn btn-primary btn-block" onclick="showCreate()">＋ 新建投票</button>
+      </div>
+
+      <div class="card" style="padding: 20px;">
+        <label>加入已有投票</label>
+        <div class="join-row">
+          <input type="text" id="join-code" placeholder="粘贴投票链接或 ID">
+          <button class="btn btn-secondary" onclick="joinByCode()">加入</button>
+        </div>
+      </div>
+
+      <div id="poll-list-container">
+        <ul class="poll-list" id="poll-list"></ul>
+        <div class="empty-state" id="empty-state">
+          <div style="font-size: 3rem; margin-bottom: 8px;">📋</div>
+          <p>还没有本地记录的投票<br>创建新投票或用链接加入</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- CREATE -->
+    <div id="view-create" class="hidden">
+      <button class="back-link" onclick="showHome()">← 返回首页</button>
+      <div class="card">
+        <h2>新建投票</h2>
+        <div style="margin-bottom: 16px;">
+          <label for="poll-title">投票标题</label>
+          <input type="text" id="poll-title" placeholder="例如：今晚吃什么？" maxlength="80">
+        </div>
+        <div>
+          <label>选项</label>
+          <div id="options-container">
+            <div class="option-row">
+              <input type="text" class="option-input" placeholder="选项 1" maxlength="60">
+            </div>
+            <div class="option-row">
+              <input type="text" class="option-input" placeholder="选项 2" maxlength="60">
+            </div>
+          </div>
+          <button class="btn btn-secondary" style="margin-top: 6px;" onclick="addOption()">＋ 添加选项</button>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary btn-block" id="create-btn" onclick="createPoll()">创建投票</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VOTE / RESULTS -->
+    <div id="view-poll" class="hidden">
+      <button class="back-link" onclick="showHome()">← 返回首页</button>
+      <div class="card">
+        <div class="live-badge" id="live-badge">
+          <span class="live-dot"></span> 实时同步中
+        </div>
+        <h2 id="poll-question"></h2>
+        <div id="voted-badge" class="voted-badge hidden">✓ 你已投票</div>
+        <div id="vote-form"></div>
+        <div id="results-section" class="hidden">
+          <div class="total-votes" id="total-votes"></div>
+          <div id="results-bars"></div>
+        </div>
+        <div class="actions" id="vote-actions">
+          <button class="btn btn-primary btn-block" id="submit-vote-btn" onclick="submitVote()" disabled>提交投票</button>
+        </div>
+
+        <!-- 分享区域 -->
+        <div class="share-box" id="share-box">
+          <label>分享给朋友（复制链接）</label>
+          <div class="share-row">
+            <input type="text" id="share-url" readonly>
+            <button class="btn btn-secondary" onclick="copyShareLink()">复制</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 加载中 -->
+    <div id="view-loading" class="hidden">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    /* ============================================================
+       ① 在这里填入你的 Firebase 配置
+       获取方法见文件最底部的「配置步骤」
+       ============================================================ */
+    const firebaseConfig = {
+      apiKey: "AIzaSyAvM1rhwM7Fkr5XypbPrxP4Vc15caTJEkQ",
+      authDomain: "realtime-vote-d6339.firebaseapp.com",
+      databaseURL: "https://realtime-vote-d6339-default-rtdb.firebaseio.com",
+      projectId: "realtime-vote-d6339",
+      storageBucket: "realtime-vote-d6339.firebasestorage.app",
+      messagingSenderId: "726193919421",
+      appId: "1:726193919421:web:85fe63199c7a181bb7e0d4"
+    };
+
+    // ---------- 以下代码一般不需要修改 ----------
+
+    const VOTED_KEY = 'butter_voted_cloud_v1';
+    const MY_POLLS_KEY = 'butter_my_polls_v1';
+
+    let db = null;
+    let firebaseReady = false;
+    let currentPollId = null;
+    let currentPoll = null;
+    let selectedOption = null;
+    let votedMap = {};
+    let myPollIds = [];
+    let pollListener = null;
+
+    function isConfigValid() {
+      return firebaseConfig.apiKey &&
+             firebaseConfig.apiKey !== 'YOUR_API_KEY' &&
+             firebaseConfig.databaseURL &&
+             !firebaseConfig.databaseURL.includes('YOUR_PROJECT');
+    }
+
+    function initFirebase() {
+      if (!isConfigValid()) {
+        document.getElementById('config-banner').classList.remove('hidden');
+        return false;
+      }
+      try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+        firebaseReady = true;
+        return true;
+      } catch (e) {
+        console.error(e);
+        showToast('Firebase 初始化失败，请检查配置');
+        return false;
+      }
+    }
+
+    function loadLocal() {
+      try {
+        votedMap = JSON.parse(localStorage.getItem(VOTED_KEY) || '{}');
+        myPollIds = JSON.parse(localStorage.getItem(MY_POLLS_KEY) || '[]');
+      } catch (e) {
+        votedMap = {};
+        myPollIds = [];
+      }
+    }
+
+    function saveVoted() {
+      localStorage.setItem(VOTED_KEY, JSON.stringify(votedMap));
+    }
+
+    function saveMyPolls() {
+      localStorage.setItem(MY_POLLS_KEY, JSON.stringify(myPollIds));
+    }
+
+    // ---------- Views ----------
+    function showHome() {
+      stopListening();
+      document.getElementById('view-home').classList.remove('hidden');
+      document.getElementById('view-create').classList.add('hidden');
+      document.getElementById('view-poll').classList.add('hidden');
+      document.getElementById('view-loading').classList.add('hidden');
+      if (window.history.replaceState) {
+        const url = new URL(window.location);
+        url.searchParams.delete('p');
+        window.history.replaceState({}, '', url);
+      }
+      renderMyPollList();
+    }
+
+    function showCreate() {
+      if (!firebaseReady) {
+        showToast('请先配置 Firebase');
+        return;
+      }
+      document.getElementById('view-home').classList.add('hidden');
+      document.getElementById('view-create').classList.remove('hidden');
+      document.getElementById('view-poll').classList.add('hidden');
+      document.getElementById('poll-title').value = '';
+      document.getElementById('options-container').innerHTML = `
+        <div class="option-row">
+          <input type="text" class="option-input" placeholder="选项 1" maxlength="60">
+        </div>
+        <div class="option-row">
+          <input type="text" class="option-input" placeholder="选项 2" maxlength="60">
+        </div>
+      `;
+    }
+
+    function showLoading() {
+      document.getElementById('view-home').classList.add('hidden');
+      document.getElementById('view-create').classList.add('hidden');
+      document.getElementById('view-poll').classList.add('hidden');
+      document.getElementById('view-loading').classList.remove('hidden');
+    }
+
+    function showPollView() {
+      document.getElementById('view-home').classList.add('hidden');
+      document.getElementById('view-create').classList.add('hidden');
+      document.getElementById('view-loading').classList.add('hidden');
+      document.getElementById('view-poll').classList.remove('hidden');
+    }
+
+    // ---------- Render ----------
+    async function renderMyPollList() {
+      const list = document.getElementById('poll-list');
+      const empty = document.getElementById('empty-state');
+
+      if (!firebaseReady || myPollIds.length === 0) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+      list.innerHTML = '<div class="loading" style="padding:20px">加载中...</div>';
+
+      const items = [];
+      for (const id of myPollIds.slice().reverse()) {
+        try {
+          const snap = await db.ref('polls/' + id).once('value');
+          const p = snap.val();
+          if (p) {
+            const total = (p.votes || []).reduce((s, v) => s + v, 0);
+            items.push({ id, title: p.title, total, opts: (p.options || []).length });
+          }
+        } catch (e) { /* ignore missing */ }
+      }
+
+      if (items.length === 0) {
+        list.innerHTML = '';
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      list.innerHTML = items.map(item => `
+        <li class="poll-item" onclick="openPoll('${item.id}')">
+          <div>
+            <div class="poll-item-title">${escapeHtml(item.title)}</div>
+            <div class="poll-item-meta">${item.total} 票 · ${item.opts} 个选项</div>
+          </div>
+          <span class="poll-item-arrow">→</span>
+        </li>
+      `).join('');
+    }
+
+    function renderPollUI() {
+      if (!currentPoll) return;
+
+      document.getElementById('poll-question').textContent = currentPoll.title;
+      const hasVoted = votedMap[currentPollId] !== undefined;
+
+      const voteForm = document.getElementById('vote-form');
+      const resultsSection = document.getElementById('results-section');
+      const voteActions = document.getElementById('vote-actions');
+      const badge = document.getElementById('voted-badge');
+
+      const shareUrl = getShareUrl(currentPollId);
+      document.getElementById('share-url').value = shareUrl;
+
+      if (hasVoted) {
+        badge.classList.remove('hidden');
+        voteForm.classList.add('hidden');
+        voteActions.classList.add('hidden');
+        resultsSection.classList.remove('hidden');
+        renderResults(currentPoll);
+      } else {
+        badge.classList.add('hidden');
+        voteForm.classList.remove('hidden');
+        voteActions.classList.remove('hidden');
+        resultsSection.classList.add('hidden');
+        document.getElementById('submit-vote-btn').disabled = selectedOption === null;
+
+        voteForm.innerHTML = (currentPoll.options || []).map((opt, i) => `
+          <label class="vote-option ${selectedOption === i ? 'selected' : ''}" onclick="selectOption(${i})">
+            <input type="radio" name="vote" value="${i}" ${selectedOption === i ? 'checked' : ''}>
+            <span>${escapeHtml(opt)}</span>
+          </label>
+        `).join('');
+      }
+    }
+
+    function renderResults(poll) {
+      const votes = poll.votes || [];
+      const total = votes.reduce((s, v) => s + v, 0);
+      document.getElementById('total-votes').textContent = `共 ${total} 票`;
+
+      const bars = document.getElementById('results-bars');
+      bars.innerHTML = (poll.options || []).map((opt, i) => {
+        const count = votes[i] || 0;
+        const pct = total === 0 ? 0 : Math.round((count / total) * 1000) / 10;
+        return `
+          <div class="result-item">
+            <div class="result-header">
+              <span class="result-label">${escapeHtml(opt)}</span>
+              <span>
+                <span class="result-pct">${pct}%</span>
+                <span class="result-votes">(${count})</span>
+              </span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" data-pct="${pct}" style="width: 0%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          bars.querySelectorAll('.bar-fill').forEach(el => {
+            el.style.width = el.dataset.pct + '%';
+          });
+        });
+      });
+    }
+
+    // ---------- Actions ----------
+    function addOption() {
+      const container = document.getElementById('options-container');
+      const count = container.querySelectorAll('.option-row').length;
+      if (count >= 10) {
+        showToast('最多添加 10 个选项');
+        return;
+      }
+      const row = document.createElement('div');
+      row.className = 'option-row';
+      row.innerHTML = `
+        <input type="text" class="option-input" placeholder="选项 ${count + 1}" maxlength="60">
+        <button class="btn btn-danger" onclick="this.parentElement.remove()" title="删除">×</button>
+      `;
+      container.appendChild(row);
+    }
+
+    async function createPoll() {
+      if (!firebaseReady) {
+        showToast('请先配置 Firebase');
+        return;
+      }
+
+      const title = document.getElementById('poll-title').value.trim();
+      if (!title) {
+        showToast('请填写投票标题');
+        return;
+      }
+      const inputs = document.querySelectorAll('.option-input');
+      const options = [];
+      inputs.forEach(inp => {
+        const v = inp.value.trim();
+        if (v) options.push(v);
+      });
+      if (options.length < 2) {
+        showToast('至少需要 2 个有效选项');
+        return;
+      }
+
+      const btn = document.getElementById('create-btn');
+      btn.disabled = true;
+      btn.textContent = '创建中...';
+
+      try {
+        const ref = db.ref('polls').push();
+        const id = ref.key;
+        const data = {
+          title,
+          options,
+          votes: options.map(() => 0),
+          created: Date.now()
+        };
+        await ref.set(data);
+
+        if (!myPollIds.includes(id)) {
+          myPollIds.push(id);
+          saveMyPolls();
+        }
+
+        showToast('投票创建成功！');
+        openPoll(id);
+      } catch (e) {
+        console.error(e);
+        showToast('创建失败：' + (e.message || '请检查 Firebase 规则'));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '创建投票';
+      }
+    }
+
+    function selectOption(index) {
+      selectedOption = index;
+      document.querySelectorAll('.vote-option').forEach((el, i) => {
+        el.classList.toggle('selected', i === index);
+      });
+      document.getElementById('submit-vote-btn').disabled = false;
+    }
+
+    async function submitVote() {
+      if (selectedOption === null || votedMap[currentPollId] !== undefined || !firebaseReady) return;
+
+      const btn = document.getElementById('submit-vote-btn');
+      btn.disabled = true;
+      btn.textContent = '提交中...';
+
+      try {
+        const voteRef = db.ref('polls/' + currentPollId + '/votes/' + selectedOption);
+        await voteRef.transaction(current => (current || 0) + 1);
+
+        votedMap[currentPollId] = selectedOption;
+        saveVoted();
+        showToast('投票成功！');
+        renderPollUI();
+      } catch (e) {
+        console.error(e);
+        showToast('投票失败：' + (e.message || '网络错误'));
+        btn.disabled = false;
+        btn.textContent = '提交投票';
+      }
+    }
+
+    function openPoll(id) {
+      if (!firebaseReady) {
+        showToast('请先配置 Firebase');
+        return;
+      }
+      currentPollId = id;
+      selectedOption = null;
+      showLoading();
+
+      if (window.history.replaceState) {
+        const url = new URL(window.location);
+        url.searchParams.set('p', id);
+        window.history.replaceState({}, '', url);
+      }
+
+      stopListening();
+      pollListener = db.ref('polls/' + id).on('value', snap => {
+        const data = snap.val();
+        if (!data) {
+          showToast('投票不存在或已被删除');
+          showHome();
+          return;
+        }
+        currentPoll = data;
+        showPollView();
+        renderPollUI();
+      }, err => {
+        console.error(err);
+        showToast('加载失败');
+        showHome();
+      });
+    }
+
+    function stopListening() {
+      if (pollListener && currentPollId && db) {
+        db.ref('polls/' + currentPollId).off('value', pollListener);
+        pollListener = null;
+      }
+    }
+
+    function joinByCode() {
+      let raw = document.getElementById('join-code').value.trim();
+      if (!raw) {
+        showToast('请输入链接或 ID');
+        return;
+      }
+      try {
+        if (raw.includes('http') || raw.includes('?p=') || raw.includes('&p=')) {
+          const u = new URL(raw, window.location.origin);
+          raw = u.searchParams.get('p') || raw;
+        }
+      } catch (e) { /* 当作纯 id */ }
+
+      if (raw.startsWith('#')) raw = raw.slice(1);
+      if (raw.includes('p=')) {
+        const m = raw.match(/p=([A-Za-z0-9_-]+)/);
+        if (m) raw = m[1];
+      }
+
+      openPoll(raw);
+    }
+
+    function getShareUrl(id) {
+      const url = new URL(window.location.href);
+      url.search = '';
+      url.hash = '';
+      url.searchParams.set('p', id);
+      return url.toString();
+    }
+
+    function copyShareLink() {
+      const input = document.getElementById('share-url');
+      input.select();
+      input.setSelectionRange(0, 99999);
+      try {
+        navigator.clipboard.writeText(input.value).then(() => {
+          showToast('链接已复制');
+        }).catch(() => {
+          document.execCommand('copy');
+          showToast('链接已复制');
+        });
+      } catch (e) {
+        document.execCommand('copy');
+        showToast('链接已复制');
+      }
+    }
+
+    // ---------- Utils ----------
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    // ---------- Init ----------
+    loadLocal();
+    const ok = initFirebase();
+
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get('p');
+    if (pid && ok) {
+      openPoll(pid);
+    } else {
+      showHome();
+    }
+  </script>
+</body>
+</html>
+
+<!--
+============================================================
+  Firebase 配置步骤（约 3 分钟）
+============================================================
+
+1. 打开 https://console.firebase.google.com/ 并登录 Google 账号
+
+2. 点击「添加项目」→ 起个名字 → 按提示创建（可关掉 Google Analytics）
+
+3. 项目创建后：
+   - 点击左侧「Realtime Database」→「创建数据库」
+   - 位置选一个近的（如 asia-southeast1）
+   - 安全规则先选「测试模式」（方便试用）
+
+4. 左侧点「项目设置」（齿轮图标）→ 往下找到「您的应用」→ 点 Web 图标 </>
+   - 登记一个昵称 → 注册应用
+   - 复制弹出的 firebaseConfig 对象里的全部字段
+
+5. 用记事本打开本 index.html，找到脚本里的：
+   const firebaseConfig = { ... }
+   把 YOUR_API_KEY 等全部替换成你复制的真实值
+
+6. （必须）设置数据库规则：
+   Realtime Database → 规则，改成下面这样，然后点「发布」：
+
+   {
+     "rules": {
+       "polls": {
+         ".read": true,
+         ".write": true
+       }
+     }
+   }
+
+   注意：这是开放读写，适合朋友间使用。不要用于正式公开网站。
+
+7. 保存 HTML 文件。
+   - 本地用浏览器打开可以自测
+   - 若要分享给别人：把 HTML 上传到任意静态托管
+     （GitHub Pages、Netlify、Vercel、或者自己的服务器）
+     然后把带 ?p=投票ID 的完整链接发给朋友即可。
+
+============================================================
+-->
